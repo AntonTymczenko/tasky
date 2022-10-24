@@ -30,8 +30,11 @@ class List {
   list = document.createElement('div');
   items: Item[] = [];
 
-  constructor (items: Item[]) {
+  constructor () {
+    const readFromLocalStorageItems = localStorage.getItem('items');
+    const items = JSON.parse(readFromLocalStorageItems || "[]");
     this.items = items;
+    this.sortStatus(); // just in case
   }
 
   itemsWereUpdated () {
@@ -234,8 +237,6 @@ class List {
 }
 
 
-const readFromLocalStorageItems = localStorage.getItem('items');
-const items = JSON.parse(readFromLocalStorageItems || "[]");
-const list = new List(items);
+const list = new List();
 
 list.initialize();
