@@ -1,0 +1,15 @@
+{
+  "name": "tasky",
+  "version": "1.0.0",
+  "description": "To-do app",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "todo",
+    "organizer"
+  ],
+  "author": "Anton Tymczenko",
+  "license": "ISC"
+}
