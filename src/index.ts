@@ -1,9 +1,10 @@
-const DEBUG_MODE = true;
+const DEBUG_MODE = false;
 
 interface Item {
   id: string;
   title: string;
   status: boolean;
+  node?: HTMLDivElement;
 }
 
 interface AddedItem {
@@ -15,10 +16,13 @@ interface ItemUpdates {
   status?: boolean;
 }
 
-const IDs = {
-  ADD_NEW_ITEM: 'add-new-item',
-  ITEMS_LIST: 'items-list',
-};
+const constants = {
+  ids: {
+    ADD_NEW_ITEM: 'add-new-item',
+    ITEMS_LIST: 'items-list',
+  },
+  doneCleanUpDelay: 1000,
+}
 
 class List {
   body = document.createElement('body');
@@ -30,53 +34,52 @@ class List {
     this.items = items;
   }
 
-  itemsWereUpdated (reRender?: boolean) {
+  itemsWereUpdated () {
     this.saveToLocalStorage();
 
     if (DEBUG_MODE) {
       console.log('---------------------------------')
       this.items.forEach(item => console.log(item));
     }
-
-    if (reRender) {
-      this.renderList();
-    }
   }
 
   saveToLocalStorage () {
-    const data = JSON.stringify(this.items);
+    const toSave = this.items
+      .map(({ id, title, status, }) => ({ id, title, status }));
+
+    const data = JSON.stringify(toSave);
     localStorage.setItem('items', data);
   }
 
   renderInput (item: Item): HTMLInputElement {
+    const { id, status } = item;
     const input = document.createElement('input');
     input.setAttribute('type', 'checkbox');
-    input.setAttribute('id', `checkbox-${item.id}`);
-    input.setAttribute('name', item.id);
-    input.setAttribute('value', item.status ? 'done' : '');
-    if (item.status) {
+    input.setAttribute('id', `checkbox-${id}`);
+    input.setAttribute('name', id);
+    input.setAttribute('value', status ? 'done' : '');
+    if (status) {
       input.setAttribute('checked', '');
     }
 
     input.addEventListener('change', () => {
-      this.updateItem(item, { status: !item.status });
-      this.itemsWereUpdated();
+      this.updateItem(id, { status: !item.status });
     })
 
     return input;
   };
 
   renderLabel (item: Item): HTMLLabelElement {
+    const { id, title } = item;
     const label = document.createElement('label');
-    label.setAttribute('for', item.id);
-    const text = document.createTextNode(item.title);
+    label.setAttribute('for', id);
+    const text = document.createTextNode(title);
     label.appendChild(text);
     label.addEventListener('click', () => {
-      const title = window.prompt(`Change title of ${item.title}?`);
+      const titleUpdated = window.prompt(`Change title of ${title}?`);
 
-      if (title) {
-        this.updateItem(item, { title });
-        this.itemsWereUpdated(true);
+      if (titleUpdated) {
+        this.updateItem(id, { title: titleUpdated });
       }
     });
 
@@ -84,18 +87,23 @@ class List {
   };
 
   renderItem (item: Item): HTMLDivElement {
-    const checkbox = document.createElement('div');
+    const itemElement = document.createElement('div');
 
     const input = this.renderInput(item);
-    checkbox.appendChild(input);
+    itemElement.appendChild(input);
 
     const label = this.renderLabel(item);
-    checkbox.appendChild(label);
+    itemElement.appendChild(label);
 
     const br = document.createElement('br');
-    checkbox.appendChild(br);
+    itemElement.appendChild(br);
 
-    return checkbox;
+    if (item.node) {
+      item.node.replaceWith(itemElement); // re-render
+    }
+    item.node = itemElement;
+
+    return itemElement;
   };
 
   renderAddNewItemElement () {
@@ -111,7 +119,7 @@ class List {
 
       if (title) {
         this.addItem({ title });
-        this.itemsWereUpdated(true);
+        this.itemsWereUpdated();
       }
     })
 
@@ -119,7 +127,7 @@ class List {
   };
 
   renderList () {
-    this.list = document.querySelector(`div#${IDs.ITEMS_LIST}`)!;
+    this.list = document.querySelector(`div#${constants.ids.ITEMS_LIST}`)!;
     this.list.innerHTML = '';
 
     this.items.forEach(item => {
@@ -129,7 +137,6 @@ class List {
   };
 
   addItem (item: AddedItem) {
-
     const SAFE_EXIT_LIMIT = 1_000_000_000;
     let candidateId: string = (Math.random()*SAFE_EXIT_LIMIT).toString();
     let unique = false;
@@ -148,21 +155,64 @@ class List {
         status: false,
       });
     }
+    this.renderList();
   };
 
-  updateItem (item: Item, change: ItemUpdates) {
-    const theItem = this.items.find(({id}) => id === item.id);
+  updateItem (itemId: string, change: ItemUpdates) {
+    const theItem = this.items.find(({id}) => id === itemId);
     if (!theItem) {
-      throw new Error(`Item to update is not found ${item.id}`);
+      throw new Error(`Item to update is not found ${itemId}`);
     }
 
     const updatedStatus = change.status;
     if (updatedStatus !== undefined) {
       theItem.status = updatedStatus;
+      this.sortStatus();
     }
+
     const updatedTitle = change.title;
     if (updatedTitle !== undefined) {
       theItem.title = updatedTitle;
+      this.renderItem(theItem);
+    }
+
+    this.itemsWereUpdated();
+  }
+
+  sortStatus () {
+    // response with a boolean that shows if we need to re-render
+    // becasue some re-arrangement of items happened
+    let needToReRender = false;
+
+    // TODO: move each of the existing items, change their indexes
+    //       this will be needed for proper animation later
+    const pendingItems: Item[] = [];
+    const pendingItemsIndexes: number[] = [];
+    const doneItems: Item[] = [];
+    const doneItemsIndexes: number[] = [];
+
+    this.items.forEach((item, index) => {
+      if (item.status === true) {
+        doneItems.push(item);
+        doneItemsIndexes.push(index);
+      } else {
+        pendingItems.push(item);
+        pendingItemsIndexes.push(index);
+      }
+    });
+
+    const updatedList = pendingItems.concat(doneItems);
+    const updatedIndexesList = pendingItemsIndexes.concat(doneItemsIndexes);
+
+    for (let i = 0; i < this.items.length; i++) {
+      if (i !== updatedIndexesList[i]) {
+        needToReRender = true;
+        break;
+      }
+    }
+    if (needToReRender) {
+      this.items = updatedList;
+      setTimeout(() => this.renderList(), constants.doneCleanUpDelay);
     }
   }
 
@@ -170,7 +220,7 @@ class List {
     this.body = document.querySelector('body') as HTMLBodyElement;
 
     this.addNewItemElement = document.createElement('div') as HTMLDivElement;
-    this.addNewItemElement.setAttribute('id', IDs.ADD_NEW_ITEM);
+    this.addNewItemElement.setAttribute('id', constants.ids.ADD_NEW_ITEM);
     this.body.append(this.addNewItemElement);
 
     this.list = document.createElement('div') as HTMLDivElement;
