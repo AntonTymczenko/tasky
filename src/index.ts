@@ -1,3 +1,5 @@
+const DEBUG_MODE = true;
+
 interface Item {
   id: string;
   title: string;
@@ -29,11 +31,21 @@ class List {
   }
 
   itemsWereUpdated (reRender?: boolean) {
-    console.log('---------------------------------')
-    this.items.forEach(item => console.log(item));
+    this.saveToLocalStorage();
+
+    if (DEBUG_MODE) {
+      console.log('---------------------------------')
+      this.items.forEach(item => console.log(item));
+    }
+
     if (reRender) {
       this.renderList();
     }
+  }
+
+  saveToLocalStorage () {
+    const data = JSON.stringify(this.items);
+    localStorage.setItem('items', data);
   }
 
   renderInput (item: Item): HTMLInputElement {
@@ -47,7 +59,6 @@ class List {
     }
 
     input.addEventListener('change', () => {
-      console.log(`changed ${item.id}`)
       this.updateItem(item, { status: !item.status });
       this.itemsWereUpdated();
     })
@@ -61,8 +72,7 @@ class List {
     const text = document.createTextNode(item.title);
     label.appendChild(text);
     label.addEventListener('click', () => {
-      console.log(`click title ${item.title}`)
-      const title = window.prompt('Change title?');
+      const title = window.prompt(`Change title of ${item.title}?`);
 
       if (title) {
         this.updateItem(item, { title });
@@ -120,18 +130,24 @@ class List {
 
   addItem (item: AddedItem) {
 
-    let candidateId: string = (Math.random()*1_000_000_000).toString();
+    const SAFE_EXIT_LIMIT = 1_000_000_000;
+    let candidateId: string = (Math.random()*SAFE_EXIT_LIMIT).toString();
     let unique = false;
-    while (!unique) {
-      candidateId = (Math.random()*1_000_000_000).toString();
+    let safeExit = 0;
+    while (!unique && safeExit < SAFE_EXIT_LIMIT) {
+      candidateId = (Math.random()*SAFE_EXIT_LIMIT).toString();
       unique = !this.items.find(({ id }) => id === candidateId);
+      safeExit++;
     };
-
-    this.items.unshift({
-      id: candidateId,
-      title: item.title,
-      status: false,
-    });
+    if (!unique) {
+      window.alert('Sorry, too many items already, cannot add another one');
+    } else {
+      this.items.unshift({
+        id: candidateId,
+        title: item.title,
+        status: false,
+      });
+    }
   };
 
   updateItem (item: Item, change: ItemUpdates) {
@@ -168,22 +184,8 @@ class List {
 }
 
 
-const list = new List([
-  {
-    id: 'foo',
-    title: 'Foo',
-    status: true,
-  },
-  {
-    id: 'bar',
-    title: 'Bar',
-    status: false,
-  },
-  {
-    id: 'baz',
-    title: 'Baz',
-    status: false,
-  },
-]);
+const readFromLocalStorageItems = localStorage.getItem('items');
+const items = JSON.parse(readFromLocalStorageItems || "[]");
+const list = new List(items);
 
 list.initialize();
