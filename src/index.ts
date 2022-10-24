@@ -16,12 +16,18 @@ interface ItemUpdates {
   status?: boolean;
 }
 
+interface Movement {
+  from: number;
+  to: number;
+};
+
+
 const constants = {
   ids: {
     ADD_NEW_ITEM: 'add-new-item',
     ITEMS_LIST: 'items-list',
   },
-  doneCleanUpDelay: 1000,
+  // doneCleanUpDelay: 1000,
 }
 
 class List {
@@ -34,7 +40,6 @@ class List {
     const readFromLocalStorageItems = localStorage.getItem('items');
     const items = JSON.parse(readFromLocalStorageItems || "[]");
     this.items = items;
-    this.sortStatus(); // just in case
   }
 
   itemsWereUpdated () {
@@ -91,6 +96,7 @@ class List {
 
   renderItem (item: Item): HTMLDivElement {
     const itemElement = document.createElement('div');
+    itemElement.classList.add('list-item');
 
     const input = this.renderInput(item);
     itemElement.appendChild(input);
@@ -139,6 +145,24 @@ class List {
     });
   };
 
+  reorderItems (movements: Movement[]) {
+    const listItems = this.list.childNodes;
+    movements.forEach(({from, to}) => {
+      const childToMove = listItems[from];
+      const parentNode = childToMove.parentNode;
+      if (parentNode) {
+        if (to >= listItems.length - 1) {
+          parentNode.appendChild(childToMove)
+        } else {
+          const childToMoveBefore = to > from
+            ? listItems[to + 1]
+            : listItems[to];
+          parentNode.insertBefore(childToMove, childToMoveBefore);
+        }
+      }
+    })
+  }
+
   addItem (item: AddedItem) {
     const SAFE_EXIT_LIMIT = 1_000_000_000;
     let candidateId: string = (Math.random()*SAFE_EXIT_LIMIT).toString();
@@ -162,15 +186,17 @@ class List {
   };
 
   updateItem (itemId: string, change: ItemUpdates) {
-    const theItem = this.items.find(({id}) => id === itemId);
-    if (!theItem) {
+    const theItemIndex = this.items.findIndex(({id}) => id === itemId);
+    const theItem = this.items[theItemIndex];
+    if (theItemIndex === -1 || !theItem) {
       throw new Error(`Item to update is not found ${itemId}`);
     }
 
     const updatedStatus = change.status;
     if (updatedStatus !== undefined) {
       theItem.status = updatedStatus;
-      this.sortStatus();
+      const moveToIndex = this.getSortedIndex(theItemIndex);
+      this.reorderItems([{ from: theItemIndex, to: moveToIndex}]);
     }
 
     const updatedTitle = change.title;
@@ -182,7 +208,7 @@ class List {
     this.itemsWereUpdated();
   }
 
-  sortStatus () {
+  getSortedIndex (originalIndex: number): number {
     // response with a boolean that shows if we need to re-render
     // becasue some re-arrangement of items happened
     let needToReRender = false;
@@ -215,8 +241,13 @@ class List {
     }
     if (needToReRender) {
       this.items = updatedList;
-      setTimeout(() => this.renderList(), constants.doneCleanUpDelay);
+      const movedTo = updatedIndexesList.indexOf(originalIndex);
+      if (movedTo !== -1) {
+        return movedTo;
+      }
     }
+
+    return originalIndex;
   }
 
   initialize () {
