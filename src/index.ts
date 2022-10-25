@@ -96,7 +96,6 @@ class List {
 
   renderItem (item: Item): HTMLDivElement {
     const itemElement = document.createElement('div');
-    itemElement.classList.add('list-item');
 
     const input = this.renderInput(item);
     itemElement.appendChild(input);
